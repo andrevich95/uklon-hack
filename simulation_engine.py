@@ -105,6 +105,7 @@ class SimulationEngine:
 
         self._rides_history = []
         self._current_rides = []
+        self._expired_orders = []
         self._available_orders = {}
         self._current_order_index = 0
         self._max_order_index = len(self._orders_list)
@@ -118,7 +119,12 @@ class SimulationEngine:
 
     def _calculate_simulation_step(self):
         self._current_rides = list(filterfalse(self._finish_ride, self._current_rides))
-        
+
+        for order in self._available_orders.values():
+            if order.start_time + self._available_orders_expire_time > self._curr_simulation_time:
+                del self._available_orders[order.id]
+                self._expired_orders.append(order)
+
         while self._current_order_index < self._max_order_index:
             c_order = self._orders_list[self._current_order_index]
             if c_order.start_time > self._curr_simulation_time:
@@ -154,6 +160,9 @@ class SimulationEngine:
 
     def get_rides_history(self):
         return self._rides_history
+    
+    def get_expired_order(self):
+        return self._expired_orders
 
     def set_ride(self, *, driver_id, order_id, end_time, distance_to_pickup=0, distance_from_pickup_to_dropoff=0):
         if driver_id not in self._drivers_dict:
@@ -190,8 +199,8 @@ if __name__ == '__main__':
     drivers = pd.read_csv('drivers.csv')
 
     se = SimulationEngine(
-        drivers_df=drivers[:3], 
-        orders_df=orders[:300],
+        drivers_df=drivers, 
+        orders_df=orders,
         simulation_step_delta=timedelta(minutes=1),
     )
 
@@ -204,7 +213,7 @@ if __name__ == '__main__':
         orders = se.get_available_orders()
         drivers = se.get_available_drivers()
 
-        print(f'Start sim step\n+++drivers amount: {len(drivers)}\n++Start orders amount: {len(orders)}')
+    #     print(f'Start sim step\n+++drivers amount: {len(drivers)}\n++Start orders amount: {len(orders)}')
 
         max_orders = len(orders)
         for i, driver in enumerate(drivers):
@@ -213,4 +222,5 @@ if __name__ == '__main__':
             else:
                 break
 
-    print(len(se.get_rides_history()))
+    # for ride in se.get_rides_history():
+    #     print(ride)
