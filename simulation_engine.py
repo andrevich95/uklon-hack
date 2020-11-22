@@ -108,7 +108,8 @@ class SimulationEngine:
         self._curr_simulation_time = _tmp_start_datetime.replace(hour=0, minute=0, second=0, microsecond=0) - self._simulation_step_delta
         self._stop_simulations_time = _tmp_stop_datetime + self._simulation_step_delta
 
-        self._semi_available_drivers = []
+        self._semi_available_drivers_list = []
+        
         self._rides_history = []
         self._current_rides = []
         self._expired_orders = []
@@ -123,15 +124,22 @@ class SimulationEngine:
         else:
             return False
 
-    def _calculate_simulation_step(self):
-        self._current_rides = list(filterfalse(self._finish_ride, self._current_rides))
+    def _check_semi_avable(self):
+        drivers_ride_counts = {}
+        for ride in self._current_rides:
+            drivers_ride_counts[ride.driver_id] = drivers_ride_counts.get(ride.driver_id, 0) + 1
 
         self._semi_available_drivers = []
         for ride in self._current_rides:
             if self._curr_simulation_time + self._before_ride_end > ride.end_time:
                 driver = self._drivers_dict[ride.driver_id]
-                if driver.busy_till and self._curr_simulation_time + self._before_ride_end > driver.busy_till:
+                if drivers_ride_counts[driver.id] == 1 and driver.busy_till and self._curr_simulation_time + self._before_ride_end > driver.busy_till:
                     self._semi_available_drivers.append(self._drivers_dict[ride.driver_id])
+
+    def _calculate_simulation_step(self):
+        self._current_rides = list(filterfalse(self._finish_ride, self._current_rides))
+
+        self._check_semi_avable()
 
         expire_ids = []
         for order in self._available_orders.values():
@@ -197,7 +205,7 @@ class SimulationEngine:
         
         driver = self._drivers_dict[driver_id]
 
-        if driver.busy_till and driver.busy_till >= self._curr_simulation_time + self._before_ride_end:
+        if driver.busy_till and driver.busy_till > self._curr_simulation_time + self._before_ride_end:
             raise ValueError(f'Provided driver is not available')
 
         ride = Ride(
@@ -217,18 +225,20 @@ class SimulationEngine:
         self._current_rides.append(ride)
         del self._available_orders[order_id]
 
+        self._check_semi_avable()
+
 if __name__ == '__main__':
     orders = pd.read_csv('orders_ordered.csv')
     drivers = pd.read_csv('drivers.csv')
 
     se = SimulationEngine(
-        drivers_df=drivers[:4], 
-        orders_df=orders[:300],
+        drivers_df=drivers[:15], 
+        orders_df=orders[:30000],
         simulation_step_delta=timedelta(minutes=1),
     )
 
-    se.set_simulation_step_delta(timedelta(minutes=5))
-    se.set_available_orders_expire_time(timedelta(hours=1))
+    se.set_simulation_step_delta(timedelta(minutes=2))
+    se.set_available_orders_expire_time(timedelta(hours=300000))
 
     # Baseline soluion
     for time in se:
@@ -241,7 +251,7 @@ if __name__ == '__main__':
         max_orders = len(orders)
         for i, driver in enumerate(semi):
             if i < max_orders:
-                se.set_ride(driver_id=driver.id, order_id=orders[i].id, end_time=time+timedelta(minutes=8), )
+                se.set_ride(driver_id=driver.id, order_id=orders[i].id, end_time=time+timedelta(minutes=3), )
             else:
                 break
 
@@ -249,7 +259,7 @@ if __name__ == '__main__':
         max_orders = len(orders)
         for i, driver in enumerate(drivers):
             if i < max_orders:
-                se.set_ride(driver_id=driver.id, order_id=orders[i].id, end_time=time+timedelta(minutes=8), )
+                se.set_ride(driver_id=driver.id, order_id=orders[i].id, end_time=time+timedelta(minutes=3), )
             else:
                 break
         
